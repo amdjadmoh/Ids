@@ -11,7 +11,6 @@ import cic.cs.unb.ca.jnetpcap.worker.LoadPcapInterfaceWorker;
 import cic.cs.unb.ca.jnetpcap.worker.TrafficFlowWorker;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.jnetpcap.Pcap;
 import org.jnetpcap.PcapIf;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -76,8 +75,6 @@ public  class FlowMonitorPane extends JPanel {
     private JFileChooser fileChooser;
 
     private ExecutorService csvWriterThread;
-    private String currentSaveDir;
-    private String currentSaveFileName;
     public Timer timer;
     private TimerTask task;
 
@@ -92,7 +89,12 @@ public  class FlowMonitorPane extends JPanel {
         if (modelHost == null || modelHost.trim().isEmpty()) {
             modelHost = "127.0.0.1";
         }
-        s=new Socket(modelHost,5000);
+        String modelPortValue = System.getenv("MODEL_PORT");
+        int modelPort = 5000;
+        if (modelPortValue != null && !modelPortValue.trim().isEmpty()) {
+            modelPort = Integer.parseInt(modelPortValue.trim());
+        }
+        s=new Socket(modelHost, modelPort);
         dout=new DataOutputStream(s.getOutputStream());
         }catch(Exception e){System.out.println(e);}
         //
@@ -261,12 +263,28 @@ public  class FlowMonitorPane extends JPanel {
         list = new JList<>(listModel);
         Object o=null;
         Process p;
-        String ifName = resolveInterfaceName();
-        if (ifName == null || ifName.isEmpty()) {
-            logger.error("No valid network interface found. Set CICFLOW_IFACE env var or provide ./interface file.");
-            return;
+        String interfaceToUse = null;
+        try
+        {
+        	try 
+            (BufferedReader br = new BufferedReader(new FileReader(new File("./interface")))) {
+                String line;
+                while ((line = br.readLine()) != null) {
+                 interfaceToUse = line;
+                }
+            }
         }
-        logger.info("Using interface: {}", ifName);
+        catch(Exception e)
+        {
+            System.out.println("Check command to run the interface script");
+            e.printStackTrace();
+        }
+        System.out.println(interfaceToUse);
+        
+        if (interfaceToUse == null || interfaceToUse.trim().isEmpty()) {
+            interfaceToUse = "eth0";
+        }
+        String ifName = interfaceToUse.replace("\n", "").replace("\r", "");
         if (mWorker != null && !mWorker.isCancelled()) {
             return;
         }
@@ -282,96 +300,7 @@ public  class FlowMonitorPane extends JPanel {
         
         mWorker.execute();
         String path = FlowMgr.getInstance().getAutoSaveFile();
-        File saveFile = new File(path);
-        File saveParent = saveFile.getParentFile();
-        if (saveParent != null && !saveParent.exists()) {
-            saveParent.mkdirs();
-        }
-        currentSaveDir = (saveParent == null) ? FlowMgr.getInstance().getSavePath() : saveParent.getPath();
-        currentSaveFileName = saveFile.getName();
         logger.info("path:{}", path);
-    }
-
-    private String normalizeInterfaceName(String value) {
-        if (value == null) {
-            return null;
-        }
-        String normalized = value.trim().replace("\n", "").replace("\r", "");
-        return normalized.isEmpty() ? null : normalized;
-    }
-
-    private String readInterfaceFromFile() {
-        try (BufferedReader br = new BufferedReader(new FileReader(new File("./interface")))) {
-            String line;
-            String lastNonEmpty = null;
-            while ((line = br.readLine()) != null) {
-                String normalized = normalizeInterfaceName(line);
-                if (normalized != null) {
-                    lastNonEmpty = normalized;
-                }
-            }
-            return lastNonEmpty;
-        } catch (Exception e) {
-            logger.warn("./interface not available, using auto-detection");
-            return null;
-        }
-    }
-
-    private boolean isValidInterfaceName(String interfaceName) {
-        String name = normalizeInterfaceName(interfaceName);
-        if (name == null) {
-            return false;
-        }
-
-        StringBuilder errbuf = new StringBuilder();
-        List<PcapIf> ifs = new ArrayList<>();
-        if (Pcap.findAllDevs(ifs, errbuf) != Pcap.OK) {
-            logger.warn("Unable to list network interfaces: {}", errbuf.toString());
-            return false;
-        }
-
-        for (PcapIf pcapIf : ifs) {
-            if (name.equals(pcapIf.getName())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private String findFallbackInterface() {
-        StringBuilder errbuf = new StringBuilder();
-        List<PcapIf> ifs = new ArrayList<>();
-        if (Pcap.findAllDevs(ifs, errbuf) != Pcap.OK) {
-            logger.warn("Unable to auto-detect interface: {}", errbuf.toString());
-            return null;
-        }
-
-        for (PcapIf pcapIf : ifs) {
-            String name = pcapIf.getName();
-            String lowerName = name.toLowerCase();
-            if (!lowerName.contains("loopback") && !lowerName.startsWith("lo")) {
-                return name;
-            }
-        }
-
-        if (!ifs.isEmpty()) {
-            return ifs.get(0).getName();
-        }
-        return null;
-    }
-
-    private String resolveInterfaceName() {
-        String envInterface = normalizeInterfaceName(System.getenv("CICFLOW_IFACE"));
-        if (isValidInterfaceName(envInterface)) {
-            return envInterface;
-        }
-
-        String fileInterface = normalizeInterfaceName(readInterfaceFromFile());
-        if (isValidInterfaceName(fileInterface)) {
-            return fileInterface;
-        }
-
-        return findFallbackInterface();
     }
 
     public void timer()
@@ -391,6 +320,7 @@ public  class FlowMonitorPane extends JPanel {
 
     public void stopTrafficFlow() {
         if (mWorker != null) {
+            mWorker.flushFlows();
             mWorker.cancel(true);
         }
     }
@@ -406,32 +336,28 @@ public  class FlowMonitorPane extends JPanel {
         return flowDump.replace(flowDump.substring(i,i+23),"");
     }
     private void insertFlow(BasicFlow flow) {
+        List<String> flowStringList = new ArrayList<>();
+        List<String[]> flowDataList = new ArrayList<>();
         String flowDump = flow.dumpFlowBasedFeaturesEx();
-
-        if (currentSaveDir == null || currentSaveFileName == null) {
-            String path = FlowMgr.getInstance().getAutoSaveFile();
-            File saveFile = new File(path);
-            File saveParent = saveFile.getParentFile();
-            if (saveParent != null && !saveParent.exists()) {
-                saveParent.mkdirs();
-            }
-            currentSaveDir = (saveParent == null) ? FlowMgr.getInstance().getSavePath() : saveParent.getPath();
-            currentSaveFileName = saveFile.getName();
-        }
-
-        csvWriterThread.execute(new InsertCsvRow(FlowFeature.getHeader(), flowDump, currentSaveDir, currentSaveFileName));
-
-        try {
-            // Sending flow to Python model is best-effort and should not block CSV persistence.
+        logger.info("insertFlow reached with {} packets", flow.packetCount());
+        flowStringList.add(flowDump);
+        flowDataList.add(StringUtils.split(flowDump, ","));
+        Process p;
+        try
+        {
+            //sending flow to server
             count = count + 1;
             System.out.println(count);
-            if (dout != null) {
-                dout.writeUTF(removeTimeStamp(flowDump)+"bpoint");
-                dout.flush();
-            }
-        } catch (Exception ex) {
-            logger.warn("Unable to send flow to model socket: {}", ex.getMessage());
+            logger.info("Sending flow {} to model server", count);
+            dout.writeUTF(removeTimeStamp(flowDump)+"bpoint");  
+            dout.flush();
         }
+        catch(IOException ioe)
+        {
+            ioe.printStackTrace();
+        }
+
+    
     }
     
 }

@@ -12,6 +12,7 @@ targetCompatibility = 1.8
 repositories {
     mavenLocal()
     mavenCentral()
+    maven { url "https://repo.clojars.org/" }
 }
 dependencies {
     compile group: 'org.apache.logging.log4j', name: 'log4j-core', version: '2.11.0'
@@ -27,8 +28,9 @@ dependencies {
     compile group: 'com.google.guava', name: 'guava', version: '23.6-jre'
     // https://mvnrepository.com/artifact/org.apache.tika/tika-core
     compile group: 'org.apache.tika', name: 'tika-core', version: '1.17'
-    compile files('jnetpcap/linux/jnetpcap-1.4.r1425/jnetpcap.jar')
-    compile files('py4j-0.10.9.1.jar')
+    compile group: 'jnetpcap', name: 'jnetpcap', version:'1.4.r1425-1g'
+    //compile group: 'py4j', name: 'py4j', version:'0.10.9.1'
+    compile group: 'net.sf.py4j', name: 'py4j', version: '0.10.9.1'
 
 
 }
@@ -117,7 +119,9 @@ task exeCMD(type: JavaExec){
     }else{
         jvmArgs '-Djava.library.path=jnetpcap/linux/jnetpcap-1.4.r1425'
     }
-    //args = ["/home/yzhang29/0a/Capture/", "/home/yzhang29/0a/Capture/out/"]
+    if (project.hasProperty('pcapPath') && project.hasProperty('outPath')) {
+        args project.property('pcapPath'), project.property('outPath')
+    }
 }
 
 

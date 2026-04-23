@@ -79,7 +79,6 @@ function update_settings() {
       }
   });  
   }
-var socket = io();
 async function scan(e) {
     $(e).toggleClass('btntoscan scanning');
     if ($('#scanning_text').html() == "SCAN <br> NETWORK") {
@@ -115,10 +114,25 @@ async function scan(e) {
                   "DDoS attacks" : `distributed denial-of-service attack, the incoming traffic flooding the victim originates from many different sources. 
                                     This effectively makes it impossible to stop the attack simply by blocking a single source.`,
   }
+  function updateSummary(result) {
+    $('#count-bot').text(result["Bot"] || 0);
+    $('#count-dos').text(result["DoS attack"] || 0);
+    $('#count-bruteforce').text(result["Brute Force"] || 0);
+    $('#count-ddos').text(result["DDoS attacks"] || 0);
+    $('#count-benign').text(result["0"] || 0);
+
+    const suspicious = (result["Bot"] || 0) + (result["DoS attack"] || 0) + (result["Brute Force"] || 0) + (result["DDoS attacks"] || 0);
+    if (suspicious > 0) {
+      $('#live-summary-status').text(`Latest chunk contains ${suspicious} suspicious flow(s).`);
+    } else {
+      $('#live-summary-status').text(`Latest chunk looks benign. Benign flows: ${result["0"] || 0}.`);
+    }
+  }
   var socket = io();
   socket.on('predection', function(res) {
     console.log('got the result:',res);
     console.log(res.result);
+    updateSummary(res.result);
     var maxProp = null
     var maxValue = -1
     for (var prop in res.result) {
@@ -142,7 +156,7 @@ async function scan(e) {
       reset_traffic();
     }
     // reset traffic when reach 200 for default net
-    if (res.result[0]>=resetlevel){
+    if ((res.result['0'] || 0) >= resetlevel){
       reset_traffic();
     }
   }); 

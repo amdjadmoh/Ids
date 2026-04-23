@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import socket
+import os
 from model import model
 import requests
 predicted_results = {
@@ -10,6 +11,7 @@ predicted_results = {
     "0":0
     }
 m = model()
+BATCH_SIZE = int(os.getenv("MODEL_BATCH_SIZE", "1"))
 
 #check for unwanted bytes and remove them
 def check_flow_return_string(recv):
@@ -43,6 +45,7 @@ def server_program():
 
     server_socket.listen(2)
     conn, address = server_socket.accept()  # accept new connection
+    print(f"Model server accepted connection from {address}, batch_size={BATCH_SIZE}")
     data = '' #list of recieved data
     count = 0
     while True:
@@ -56,15 +59,16 @@ def server_program():
             continue
         data += str(data_temp) #append the recieved data to data list
         count += 1
+        print(f"Model server received flow chunk #{count}")
         #check if we recived x number of data
-        if (count == 10):
+        if count >= BATCH_SIZE:
             try:
                 m.load_data(data) #concat into one string
                 results = m.predict()
                 print(results)
                 predicted_results = data_processing(predicted_results,results)
                 print(predicted_results)
-                req = requests.get('http://0.0.0.0:7777/reset_status')
+                req = requests.get('http://127.0.0.1:7777/reset_status')
                 reset_details = req.json()
                 print(reset_details)
                 print(reset_details['reset_boolean'],type(reset_details['reset_boolean']))
@@ -77,8 +81,8 @@ def server_program():
                         "DDoS attacks":0,
                         "0":0
                         }
-                    requests.post('http://0.0.0.0:7777/reset_status')
-                requests.post('http://0.0.0.0:7777/post-predict',json=predicted_results)
+                    requests.post('http://127.0.0.1:7777/reset_status')
+                requests.post('http://127.0.0.1:7777/post-predict',json=predicted_results)
                 data = '' #clear list
                 count = 0
             except Exception as e:

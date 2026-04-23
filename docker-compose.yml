@@ -3,28 +3,37 @@ services:
     build:
       context: ./model
       dockerfile: ./Dockerfile
-    depends_on:
-      - cicflowmetter
-    volumes:
-      - ./cicflowmeter_output:/CICFlowMeter/data/daily
     environment:
-      JAVA_GATEWAY_HOST: 127.0.0.1
-    network_mode: host
+      DETECTION_MODE: near_live
+      PY4J_GATEWAY_HOST: host.docker.internal
+      PY4J_GATEWAY_PORT: "25333"
+      RUNTIME_DIR: /runtime
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./model:/app
+      - ./runtime:/runtime
+    ports:
+      - "5000:5000"
+      - "7777:7777"
     restart: always
 
-
-  cicflowmetter:    
+  cicflowmetter:
     build: 
       context: ./CICFlowMeter-master
       dockerfile: ./Dockerfile
-    volumes:
-      - ./cicflowmeter_output:/CICFlowMeter/data/daily
-    environment:
-      MODEL_HOST: 127.0.0.1
-      CICFLOW_IFACE: lo
-    network_mode: host
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
-    privileged: true
+    profiles:
+      - docker-capture
+    ports: 
+      - "25333:25333"
     restart: always
+    depends_on:
+      - model
+
+  scanner:
+    image: instrumentisto/nmap
+    profiles:
+      - demo
+    depends_on:
+      - model
+    command: ["-sS", "-T4", "-p-", "model"]

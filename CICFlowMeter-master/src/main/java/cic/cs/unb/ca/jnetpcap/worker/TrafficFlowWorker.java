@@ -14,10 +14,13 @@ import javax.swing.*;
 import java.util.List;
 
 public class TrafficFlowWorker extends SwingWorker<String,String> implements FlowGenListener{
+    private static final long LIVE_FLOW_TIMEOUT = 5_000_000L;
+    private static final long LIVE_ACTIVITY_TIMEOUT = 1_000_000L;
 
 	public static final Logger logger = LoggerFactory.getLogger(TrafficFlowWorker.class);
     public static final String PROPERTY_FLOW = "flow";
 	private String device;
+    private FlowGenerator flowGen;
 
 
     public TrafficFlowWorker(String device) {
@@ -28,7 +31,7 @@ public class TrafficFlowWorker extends SwingWorker<String,String> implements Flo
 	@Override
 	protected String doInBackground() {
 		
-		FlowGenerator   flowGen = new FlowGenerator(true,120000000L, 5000000L);
+		flowGen = new FlowGenerator(true, LIVE_FLOW_TIMEOUT, LIVE_ACTIVITY_TIMEOUT);
 		flowGen.addFlowListener(this);
 		int snaplen = 64 * 1024;//2048; // Truncate packet at this size
 		int promiscous = Pcap.MODE_PROMISCUOUS;
@@ -40,7 +43,7 @@ public class TrafficFlowWorker extends SwingWorker<String,String> implements Flo
 			return String.format("open %s fail ->",device)+errbuf.toString();
 		}
 
-		PcapPacketHandler<String> jpacketHandler = (packet, user) -> {
+        PcapPacketHandler<String> jpacketHandler = (packet, user) -> {
 
             /*
              * BufferUnderflowException while decoding header
@@ -58,6 +61,7 @@ public class TrafficFlowWorker extends SwingWorker<String,String> implements Flo
             PcapPacket permanent = new PcapPacket(Type.POINTER);
             packet.transferStateAndDataTo(permanent);
 
+            System.out.println("Captured packet on " + device);
             flowGen.addPacket(PacketReader.getBasicPacketInfo(permanent, true, false));
             if(isCancelled()) {
                 pcap.breakloop();
@@ -68,7 +72,7 @@ public class TrafficFlowWorker extends SwingWorker<String,String> implements Flo
         //FlowMgr.getInstance().setListenFlag(true);
         logger.info("Pcap is listening...");
         firePropertyChange("progress","open successfully","listening: "+device);
-        int ret = pcap.loop(Pcap.DISPATCH_BUFFER_FULL, jpacketHandler, device);
+        int ret = pcap.loop(Pcap.LOOP_INFINITE, jpacketHandler, device);
 
 		String str;
         switch (ret) {
@@ -87,6 +91,12 @@ public class TrafficFlowWorker extends SwingWorker<String,String> implements Flo
 
         return str;
 	}
+
+    public void flushFlows() {
+        if (flowGen != null) {
+            flowGen.flushCurrentFlows();
+        }
+    }
 
 	@Override
 	protected void process(List<String> chunks) {
