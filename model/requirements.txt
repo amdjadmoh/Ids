@@ -1,7 +1,7 @@
 pandas
 numpy
-sklearn
+scikit-learn==1.2.2
 netifaces
 py4j
-pwn
+pwntools
 flask_socketio

@@ -85,7 +85,16 @@ public  class FlowMonitorPane extends JPanel {
         add(initCenterPane());
         //open connection to server
         try{
-        s=new Socket("0.0.0.0",5000);  
+        String modelHost = System.getenv("MODEL_HOST");
+        if (modelHost == null || modelHost.trim().isEmpty()) {
+            modelHost = "127.0.0.1";
+        }
+        String modelPortValue = System.getenv("MODEL_PORT");
+        int modelPort = 5000;
+        if (modelPortValue != null && !modelPortValue.trim().isEmpty()) {
+            modelPort = Integer.parseInt(modelPortValue.trim());
+        }
+        s=new Socket(modelHost, modelPort);
         dout=new DataOutputStream(s.getOutputStream());
         }catch(Exception e){System.out.println(e);}
         //
@@ -272,6 +281,9 @@ public  class FlowMonitorPane extends JPanel {
         }
         System.out.println(interfaceToUse);
         
+        if (interfaceToUse == null || interfaceToUse.trim().isEmpty()) {
+            interfaceToUse = "eth0";
+        }
         String ifName = interfaceToUse.replace("\n", "").replace("\r", "");
         if (mWorker != null && !mWorker.isCancelled()) {
             return;
@@ -308,6 +320,7 @@ public  class FlowMonitorPane extends JPanel {
 
     public void stopTrafficFlow() {
         if (mWorker != null) {
+            mWorker.flushFlows();
             mWorker.cancel(true);
         }
     }
@@ -326,6 +339,7 @@ public  class FlowMonitorPane extends JPanel {
         List<String> flowStringList = new ArrayList<>();
         List<String[]> flowDataList = new ArrayList<>();
         String flowDump = flow.dumpFlowBasedFeaturesEx();
+        logger.info("insertFlow reached with {} packets", flow.packetCount());
         flowStringList.add(flowDump);
         flowDataList.add(StringUtils.split(flowDump, ","));
         Process p;
@@ -334,6 +348,7 @@ public  class FlowMonitorPane extends JPanel {
             //sending flow to server
             count = count + 1;
             System.out.println(count);
+            logger.info("Sending flow {} to model server", count);
             dout.writeUTF(removeTimeStamp(flowDump)+"bpoint");  
             dout.flush();
         }

@@ -119,7 +119,9 @@ task exeCMD(type: JavaExec){
     }else{
         jvmArgs '-Djava.library.path=jnetpcap/linux/jnetpcap-1.4.r1425'
     }
-    //args = ["/home/yzhang29/0a/Capture/", "/home/yzhang29/0a/Capture/out/"]
+    if (project.hasProperty('pcapPath') && project.hasProperty('outPath')) {
+        args project.property('pcapPath'), project.property('outPath')
+    }
 }
 
 

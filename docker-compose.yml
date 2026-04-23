@@ -1,21 +1,39 @@
-version: "3"
 services:
   model:
     build:
       context: ./model
       dockerfile: ./Dockerfile
+    environment:
+      DETECTION_MODE: near_live
+      PY4J_GATEWAY_HOST: host.docker.internal
+      PY4J_GATEWAY_PORT: "25333"
+      RUNTIME_DIR: /runtime
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./model:/app
+      - ./runtime:/runtime
     ports:
       - "5000:5000"
       - "7777:7777"
     restart: always
-    network_mode: "host"
 
-
-  cicflowmetter:    
+  cicflowmetter:
     build: 
       context: ./CICFlowMeter-master
       dockerfile: ./Dockerfile
+    profiles:
+      - docker-capture
     ports: 
       - "25333:25333"
     restart: always
-    network_mode: "host"
+    depends_on:
+      - model
+
+  scanner:
+    image: instrumentisto/nmap
+    profiles:
+      - demo
+    depends_on:
+      - model
+    command: ["-sS", "-T4", "-p-", "model"]

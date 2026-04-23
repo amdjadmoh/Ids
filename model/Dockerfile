@@ -1,13 +1,12 @@
-FROM python:3.8-slim-buster
+FROM python:3.8-slim-bullseye
 
 WORKDIR /app
 
 COPY ./ /app/
 
-RUN apt update -qq \
-    && apt upgrade -y \
-    && apt install -y curl gcc g++ \
-    && apt autoremove -y
+RUN apt-get update -qq \
+    && apt-get install -y --no-install-recommends curl gcc g++ \
+    && rm -rf /var/lib/apt/lists/*
 RUN pip install -r ./requirements.txt
 
 

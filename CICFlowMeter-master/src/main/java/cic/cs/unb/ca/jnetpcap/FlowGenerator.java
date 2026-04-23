@@ -9,6 +9,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Set;
 
 import static cic.cs.unb.ca.jnetpcap.Utils.LINE_SEP;
@@ -91,6 +92,8 @@ public class FlowGenerator {
     		if((currentTimestamp -flow.getFlowStartTime())>flowTimeOut){
     			if(flow.packetCount()>1){
 					if (mListener != null) {
+						System.out.println("Emitting timed out flow " + id);
+						logger.info("Emitting timed out flow {}", id);
 						mListener.onFlowGenerated(flow);
 					    }
 					else{
@@ -106,14 +109,16 @@ public class FlowGenerator {
     				logger.debug("Timeout current has {} flow",cfsize);
     	    	}
     			
-        	// Flow finished due FIN flag (tcp only):
+        	// Flow finished due FIN/RST flag (tcp only):
     		// 1.- we add the packet-in-process to the flow (it is the last packet)
         	// 2.- we move the flow to finished flow list
         	// 3.- we eliminate the flow from the current flow list   	
-    		}else if(packet.hasFlagFIN()){
-    	    	logger.debug("FlagFIN current has {} flow",currentFlows.size());
+    		}else if(packet.hasFlagFIN() || packet.hasFlagRST()){
+    	    	logger.debug("FlagEnd current has {} flow",currentFlows.size());
     	    	flow.addPacket(packet);
                 if (mListener != null) {
+                    System.out.println("Emitting finished flow " + id + " on " + (packet.hasFlagFIN() ? "FIN" : "RST"));
+                    logger.info("Emitting finished flow {} on {}", id, packet.hasFlagFIN() ? "FIN" : "RST");
                     mListener.onFlowGenerated(flow);
                 } 
 		else {
@@ -128,6 +133,28 @@ public class FlowGenerator {
     	}else{
     		currentFlows.put(packet.fwdFlowId(), new BasicFlow(bidirectional,packet)); 		
     	}
+    }
+
+    public int flushCurrentFlows() {
+        int total = 0;
+        Iterator<String> iterator = currentFlows.keySet().iterator();
+        while (iterator.hasNext()) {
+            String key = iterator.next();
+            BasicFlow flow = currentFlows.get(key);
+            if (flow != null && flow.packetCount() > 1) {
+                if (mListener != null) {
+                    System.out.println("Flushing flow " + key);
+                    logger.info("Flushing flow {}", key);
+                    mListener.onFlowGenerated(flow);
+                } else {
+                    finishedFlows.put(getFlowCount(), flow);
+                }
+                total++;
+            }
+            iterator.remove();
+        }
+        logger.info("Flushed {} current flows", total);
+        return total;
     }
 
     /*public void dumpFlowBasedFeatures(String path, String filename,String header){
