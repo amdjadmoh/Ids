@@ -1,43 +1,76 @@
-# Anomaly-detection
+# Anomaly Detection System
 
-## 1-INTRODUCTION:
-In this project we propose a solution for the cyber attacks on networks as a machine
-learning based Intrusion detection system(IDS) and it's splitted to two parts:
-### 1.1- Capturing the network flows and Features extraction:
->In this part we use [CICFlowMeter](https://github.com/ahlashkari/CICFlowMeter) to capture the flow and extract the features (83 feature),and tweaked its ui for a simpler usage.
+This project was tested in `offline` mode.
 
-### 1.2- Prediction:
->In order to achieve the highest accuracy we splitted the task into two stages to respectively detect the anomaly then classify it to a list of attacks we trained our model on, we used CSE-CIC-IDS2018 database to assure that we have the latest possible data on current cyber attacks.
+The idea is simple:
 
-<p align="center">
-  <img src="https://i.postimg.cc/9XdCfbGb/workflow.png" />
-</p>
+1. convert a `.pcap` file into a CICFlowMeter CSV
+2. copy the CSV into the model folder
+3. start the Docker model service
+4. run prediction on the CSV
 
+## Requirements
 
-## 2-Requirements:
-- ### 2.1-For the Prediction Model:
-    requirements.txt contains the needed python libraries.
-    The needed python verson should be python3.*.
-    ```
-    $ pip install -r model/requirements.txt 
-    ```
-- ### 2.2-For CICFlowMeter:
-    - Java jdk
-    - check CICFlowMeter-master/README.md 
+- Docker + Docker Compose
+- Java 8
+- `sudo` access
 
-## 3-Running the project
-### 3.1-Start the model server
-```
-$ python model/app.py
-```
-### 3.2-Start CICFlowMeter
-#### 3.2.1-For Linux
+## Offline run
+
+From the project root:
+
+### 1. Generate the CSV from the PCAP
+
 ```bash
-cd CICFlowMeter-master/
-sudo gradle
+cd CICFlowMeter-master
+sudo sh run_offline_pcap.sh ../tmp/strong-test4.pcap ./data/offline
 ```
-#### 4.2.2-For Windows
-```dos
-dir CICFlowMeter-master/
-./gradlew execute
+
+This creates:
+
+```text
+CICFlowMeter-master/data/offline/strong-test4.pcap_Flow.csv
 ```
+
+### 2. Copy the CSV into the model examples folder
+
+```bash
+cp ./data/offline/strong-test4.pcap_Flow.csv ../model/data_examples/
+```
+
+### 3. Build and start the model container
+
+Go back to the project root:
+
+```bash
+cd ..
+docker compose build model
+docker compose up -d model
+```
+
+### 4. Run prediction
+
+```bash
+docker compose exec model sh -lc 'cd /app && python offline_predict.py data_examples/strong-test4.pcap_Flow.csv'
+```
+
+## Full command list
+
+If your friend wants the exact commands in one place:
+
+```bash
+cd CICFlowMeter-master
+sudo sh run_offline_pcap.sh ../tmp/strong-test4.pcap ./data/offline
+cp ./data/offline/strong-test4.pcap_Flow.csv ../model/data_examples/
+
+cd ..
+docker compose build model
+docker compose up -d model
+docker compose exec model sh -lc 'cd /app && python offline_predict.py data_examples/strong-test4.pcap_Flow.csv'
+```
+
+## Notes
+
+- Live mode is not working yet.
+- This README documents the offline flow that was actually tested.
+- If `run_offline_pcap.sh` fails, check that Java 8 is installed.
